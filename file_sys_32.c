@@ -12,6 +12,7 @@
 static fat32DE *curr_dir = NULL; //the current directory in the navigation
 static fat32BS *bs = NULL;       //bpb holder
 static int fd = -1;              //file descriptor for directory
+static FSInfo *fs_info = NULL;
 
 void open_device(char *drive_location)
 {
@@ -33,6 +34,8 @@ void load_and_validate_bpb_params()
     assert(bs != NULL);
     read_bytes_into_variable(fd, BPB_ROOT, bs, sizeof(struct fat32BS_struct));
     validate_bpb_params();
+    fs_info = (FSInfo *)malloc(sizeof(FSInfo));
+    read_bytes_into_variable(fd, BPB_ROOT + sizeof(fat32BS), fs_info, sizeof(FSInfo));
 }
 
 /*
@@ -116,45 +119,22 @@ void print_chars_into_buffer(char dest[], char info[], int length)
 
 void print_fat32_device_info()
 {
+    uint32_t to_kb = 1024;
     uint32_t usable_space = (bs->BPB_TotSec32 - (uint32_t)bs->BPB_RsvdSecCnt - ((uint32_t)bs->BPB_NumFATs * bs->BPB_FATSz32)) * (uint32_t)bs->BPB_BytesPerSec;
     uint32_t bytes_per_cluster = (uint32_t)bs->BPB_BytesPerSec * (uint32_t)bs->BPB_SecPerClus;
     uint32_t total_bytes = (uint32_t)bs->BPB_TotSec32 * (uint32_t)bs->BPB_BytesPerSec;
+    uint32_t free_clusters = fs_info->FSI_Free_Count;
+    uint32_t free_space = (free_clusters * (uint32_t)bs->BPB_SecPerClus * (uint32_t)bs->BPB_BytesPerSec) / to_kb;
     char printBuf[MAX_BUF];
     printf("---Device Info---\n");
     print_chars_into_buffer(printBuf, bs->BS_OEMName, BS_OEMName_LENGTH);
     printf("OEM Name: %s\n", printBuf);
     print_chars_into_buffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
-    printf("Label: %s\n", printBuf);
+    printf("Volume Label: %s\n", printBuf);
+    printf("Free Space: %d kb\n", free_space);
     printf("Usable Storage: %d bytes\n", usable_space);
     printf("Cluster Size: \n\tNumber of Sectors: %d\n\tNumber of bytes: %d\n", bs->BPB_SecPerClus, bytes_per_cluster);
     printf("Total Bytes on Drive: %d\n", total_bytes);
-
-        //     printf("Media Type: %#02x (%s)\n", bs->BPB_Media, (bs->BPB_Media == BPB_MEDIA_FIXED ? "fixed" : "removable"));
-    //     // long size = bs->BPB_SecPerClus;
-    //     long size = bs->BPB_BytesPerSec;
-    //     size *= bs->BPB_TotSec32;
-    //     long sizeMB = size / (1024 * 1024);
-    //     double sizeGB = sizeMB / 1024.0;
-    //     printf("Size: %lu bytes (%luMB, %.3fGB)\n", size, sizeMB, sizeGB);
-    //     printf("Drive Number: %d (%s)\n", bs->BS_DrvNum, (bs->BS_DrvNum == BS_DRIVE_SECTOR_FLOPPY ? "floppy" : "hard disk"));
-
-    //     printf("\n---Geometry---\n");
-    //     printf("Bytes per sector: %d\n", bs->BPB_BytesPerSec);
-    //     printf("Sectors per cluster: %d\n", bs->BPB_SecPerClus);
-    //     printf("Total sectors: %d\n", bs->BPB_TotSec32);
-
-    //     printf("\n---FS Info---\n");
-    //     print_chars_into_buffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
-    //     printf("Volume ID: %s\n", printBuf);
-    //     printf("Version: %d:%d\n", bs->BPB_FSVerLow, bs->BPB_FSVerHigh);
-    //     printf("Reserved Sectors: %d\n", bs->BPB_RsvdSecCnt);
-    //     printf("Number of FATs: %d\n", bs->BPB_NumFATs);
-    //     printf("FAT Size: %d\n", bs->BPB_FATSz32);
-    //     int mirrored = (MIRRORED_FAT_BITS & bs->BPB_ExtFlags); //last 3 bits tell number of mirrored fats
-    //     int mirrored_enabled = (FAT_MIRROR_ENABLED_BIT & bs->BPB_ExtFlags);
-    //     if (mirrored_enabled == 0)
-    //         mirrored = 0;
-    //     printf("Mirrored FAT: %d (%s)\n", mirrored, (mirrored_enabled ? "yes" : "no"));
 }
 
 /*
