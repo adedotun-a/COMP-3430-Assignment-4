@@ -12,9 +12,9 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    open_device(argv[1]);
-    load_and_validate_bpb_params();
-    set_root_dir_file_entry();
+    openDisk(argv[1]);
+    initializeStructs();
+    setRootDirectory();
 
     if (!strcmp(argv[2], "info"))
     {
