@@ -19,7 +19,7 @@ void print_directory_details();
 
 void change_current_directory(char *newdir);
 
-void print_fat32_device_info();
+void deviceInfo();
 
 void open_device(char *drive_location);
 
