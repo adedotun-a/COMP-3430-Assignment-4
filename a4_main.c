@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     {
         printf("%s Information:\n", argv[1]);
         // print drive info
-        print_fat32_device_info();
+        deviceInfo();
     }
     else if (!strcmp(argv[2], "list"))
     {
