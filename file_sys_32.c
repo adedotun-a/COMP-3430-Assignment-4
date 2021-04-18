@@ -117,7 +117,7 @@ void print_chars_into_buffer(char dest[], char info[], int length)
     dest[length] = 0;
 }
 
-void print_fat32_device_info()
+void deviceInfo()
 {
     uint32_t to_kb = 1024;
     uint32_t usable_space = (bs->BPB_TotSec32 - (uint32_t)bs->BPB_RsvdSecCnt - ((uint32_t)bs->BPB_NumFATs * bs->BPB_FATSz32)) * (uint32_t)bs->BPB_BytesPerSec;
@@ -221,6 +221,7 @@ void print_directory_details()
 {
     assert(curr_dir != NULL); //Make sure this has been initialized
     assert(bs != NULL);
+
     char printBuf[MAX_BUF];
     long read_size = bs->BPB_SecPerClus * (uint64_t)bs->BPB_BytesPerSec; // TODO Refactor
     char contents[read_size];
@@ -246,7 +247,6 @@ void print_directory_details()
             // bool entry_valid = is_printable_entry(listing);
             if (is_printable_entry(listing))
             {
-
                 char *printableEntryName = convert_file_entry_name(listing->DIR_Name);
                 char *file_end = is_attr_directory(listing->DIR_Attr) ? "/" : "";
                 printf("%-16s %d%s\n", printableEntryName, listing->DIR_FileSize, file_end);
