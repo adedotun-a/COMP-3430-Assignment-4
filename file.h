@@ -104,6 +104,30 @@ struct fat32BS_struct
 
 typedef struct fat32BS_struct fat32BS;
 
+// FAT32 FSInfo Sector Structure and Backup Boot Sector
+#pragma pack(push)
+#pragma pack(1)
+struct fat32FSInfo_struct
+{
+    // This lead signature is used to validate that this is in fact an FSInfo sector.
+    uint32_t FSI_LeadSig;
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint8_t FSI_Reserved1[480];
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint32_t FSI_StrucSig;
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint32_t FSI_Free_Count;
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint32_t FSI_Nxt_Free;
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint8_t FSI_Reserved2[12];
+    // FAT32 format code should always initialize all bytes of this field to 0. Bytes in this field must currently never be used.
+    uint32_t FSI_TrailSig;
+};
+#pragma pack(pop)
+
+typedef struct fat32FSInfo_struct FSInfo;
+
 // Directory File attributes constants
 // Indicates that writes to the file should fail.
 #define ATTR_READ_ONLY 0x01
