@@ -9,12 +9,14 @@
 #include "file.h"
 #include "file_sys_32.h"
 
-static fat32DE *curr_dir = NULL; //the current directory in the navigation
-static fat32BS *bs = NULL;       //bpb holder
-static int fd = -1;              //file descriptor for directory
-static FSInfo *fs_info = NULL;
+static fat32DE *currDir = NULL; //the current directory in the navigation
+static fat32BS *bs = NULL;      //bpb holder
+static int fd = -1;             //file descriptor for directory
+static FSInfo *fsInfo = NULL;
+uint32_t dataByteStart;
+char filePath[30][250];
 
-void open_device(char *drive_location)
+void openDisk(char *drive_location)
 {
     fd = open(drive_location, O_RDONLY);
     if (fd < 0)
@@ -28,20 +30,22 @@ void open_device(char *drive_location)
     }
 }
 
-void load_and_validate_bpb_params()
+// load the BBoot Sector and BPB Structure and FAT32 FSInfo Sector, then call helper function to validate BPB parameters
+void initializeStructs()
 {
-    bs = (fat32BS *)malloc(sizeof(struct fat32BS_struct));
+    bs = (fat32BS *)malloc(sizeof(fat32BS));
     assert(bs != NULL);
-    read_bytes_into_variable(fd, BPB_ROOT, bs, sizeof(struct fat32BS_struct));
-    validate_bpb_params();
-    fs_info = (FSInfo *)malloc(sizeof(FSInfo));
-    read_bytes_into_variable(fd, BPB_ROOT + sizeof(fat32BS), fs_info, sizeof(FSInfo));
+    readBytesToVar(fd, BPB_ROOT, sizeof(fat32BS), bs);
+    validateFAT32BPB();
+    fsInfo = (FSInfo *)malloc(sizeof(FSInfo));
+    assert(fsInfo != NULL);
+    readBytesToVar(fd, BPB_ROOT + sizeof(fat32BS), sizeof(FSInfo), fsInfo);
 }
 
 /*
     Read bytes from a device into a variable.
 */
-void read_bytes_into_variable(int fd, uint64_t byte_position, void *destination, uint64_t num_bytes_to_read)
+void readBytesToVar(int fd, uint64_t byte_position, uint64_t num_bytes_to_read, void *destination)
 {
     assert(fd != -1);
     if (lseek(fd, byte_position, SEEK_SET) < 0)
@@ -57,7 +61,7 @@ void read_bytes_into_variable(int fd, uint64_t byte_position, void *destination,
     }
 }
 
-void validate_bpb_params()
+void validateFAT32BPB()
 {
     assert(bs != NULL);
     uint64_t RootDirSectors = ((bs->BPB_RootEntCnt * (uint64_t)32) + (bs->BPB_BytesPerSec - 1)) / bs->BPB_BytesPerSec;
@@ -85,7 +89,7 @@ void validate_bpb_params()
     // it should be a FAT32 Volume but extra checks will be taken
     uint64_t sector_510_bytes = 510;
     uint16_t fat32_signature;
-    read_bytes_into_variable(fd, sector_510_bytes, &fat32_signature, sizeof(uint16_t));
+    readBytesToVar(fd, sector_510_bytes, sizeof(uint16_t), &fat32_signature);
     // printf("I got signature %d\n", fat32_signature);
     assert(fat32_signature == FAT32_SIGNATURE);
     if (fat32_signature != FAT32_SIGNATURE)
@@ -95,19 +99,19 @@ void validate_bpb_params()
     }
 }
 
-void set_root_dir_file_entry()
+void setRootDirectory()
 {
     uint64_t first_cluster_sector_bytes = get_byte_location_from_cluster_number(bs, bs->BPB_RootClus);
-    curr_dir = (fat32DE *)malloc(sizeof(struct fat32DE_struct));
-    assert(curr_dir != NULL);
-    read_bytes_into_variable(fd, first_cluster_sector_bytes, curr_dir, sizeof(struct fat32DE_struct));
+    currDir = (fat32DE *)malloc(sizeof(struct fat32DE_struct));
+    assert(currDir != NULL);
+    readBytesToVar(fd, first_cluster_sector_bytes, sizeof(struct fat32DE_struct), currDir);
 }
 
 /*
     Create a string from an array of characters.
     Null terminate after copying.
 */
-void print_chars_into_buffer(char dest[], char info[], int length)
+void printCharToBuffer(char dest[], char info[], int length)
 {
     int i;
     for (i = 0; i < length; i++)
@@ -117,19 +121,20 @@ void print_chars_into_buffer(char dest[], char info[], int length)
     dest[length] = 0;
 }
 
+//  Calculates and prints the fd info
 void deviceInfo()
 {
-    uint32_t to_kb = 1024;
+    uint32_t to_kb = 1000;
     uint32_t usable_space = (bs->BPB_TotSec32 - (uint32_t)bs->BPB_RsvdSecCnt - ((uint32_t)bs->BPB_NumFATs * bs->BPB_FATSz32)) * (uint32_t)bs->BPB_BytesPerSec;
     uint32_t bytes_per_cluster = (uint32_t)bs->BPB_BytesPerSec * (uint32_t)bs->BPB_SecPerClus;
     uint32_t total_bytes = (uint32_t)bs->BPB_TotSec32 * (uint32_t)bs->BPB_BytesPerSec;
-    uint32_t free_clusters = fs_info->FSI_Free_Count;
+    uint32_t free_clusters = fsInfo->FSI_Free_Count;
     uint32_t free_space = (free_clusters * (uint32_t)bs->BPB_SecPerClus * (uint32_t)bs->BPB_BytesPerSec) / to_kb;
     char printBuf[MAX_BUF];
     printf("---Device Info---\n");
-    print_chars_into_buffer(printBuf, bs->BS_OEMName, BS_OEMName_LENGTH);
+    printCharToBuffer(printBuf, bs->BS_OEMName, BS_OEMName_LENGTH);
     printf("OEM Name: %s\n", printBuf);
-    print_chars_into_buffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
+    printCharToBuffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
     printf("Volume Label: %s\n", printBuf);
     printf("Free Space: %d kb\n", free_space);
     printf("Usable Storage: %d bytes\n", usable_space);
@@ -141,7 +146,7 @@ void deviceInfo()
     Uses the high bit and low bit to calculate the next cluster number.
     This function will return 2 if the 
 */
-uint64_t convert_high_low_to_cluster_number(uint16_t high, uint16_t low)
+uint64_t getClusterNumber(uint16_t high, uint16_t low)
 {
     uint64_t clus_num = ((uint64_t)high) << 16; //Shift by 8 bits
     clus_num = clus_num | low;
@@ -219,21 +224,21 @@ bool is_printable_entry(fat32DE *d)
 
 void print_directory_details()
 {
-    assert(curr_dir != NULL); //Make sure this has been initialized
+    assert(currDir != NULL); //Make sure this has been initialized
     assert(bs != NULL);
 
     char printBuf[MAX_BUF];
     long read_size = bs->BPB_SecPerClus * (uint64_t)bs->BPB_BytesPerSec; // TODO Refactor
     char contents[read_size];
-    // printf("Low and high %d and %d \n", curr_dir->DIR_FstClusHI, curr_dir->DIR_FstClusLO);
-    uint64_t next_cluster = convert_high_low_to_cluster_number(curr_dir->DIR_FstClusHI, curr_dir->DIR_FstClusLO);
+    // printf("Low and high %d and %d \n", currDir->DIR_FstClusHI, currDir->DIR_FstClusLO);
+    uint64_t next_cluster = getClusterNumber(currDir->DIR_FstClusHI, currDir->DIR_FstClusLO);
     uint64_t file_byte_position = get_byte_location_from_cluster_number(bs, next_cluster);
     read_byte_location_into_buffer(fd, file_byte_position, contents, read_size);
 
     fat32DE *listing = (fat32DE *)contents;
-    memcpy(curr_dir, listing, sizeof(struct fat32DE_struct));
+    memcpy(currDir, listing, sizeof(struct fat32DE_struct));
 
-    print_chars_into_buffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
+    printCharToBuffer(printBuf, bs->BS_VolLab, BS_VolLab_LENGTH);
     // printf("Volume: %s\n", printBuf);
     uint64_t num_bytes_in_cluster = bs->BPB_BytesPerSec * (uint64_t)bs->BPB_SecPerClus;
     int total_lines = num_bytes_in_cluster / 32;
@@ -256,7 +261,7 @@ void print_directory_details()
         }
         //Get the next cluster entry for the file
         uint64_t cluster_entry_bytes = calculate_fat_entry_for_cluster(bs, next_cluster);
-        read_bytes_into_variable(fd, cluster_entry_bytes, &next_cluster, sizeof(uint64_t));
+        readBytesToVar(fd, cluster_entry_bytes, sizeof(uint64_t), &next_cluster);
         next_cluster = next_cluster & NEXT_CLUSTER_MASK;
         if (next_cluster >= MAX_CLUSTER_NUMBER)
             break; //break if there is no more cluster
@@ -340,73 +345,153 @@ char *convert_file_entry_name(char entry_name[])
     return retBuf;
 }
 
-void download_file(fat32DE *listing, char *f_name)
+void downloadFile(fat32DE *listing, char *f_name)
 {
-    printf("Downloading %s\n", f_name);
-    uint64_t size = listing->DIR_FileSize;
-    uint64_t curr_clus = convert_high_low_to_cluster_number(listing->DIR_FstClusHI, listing->DIR_FstClusLO);
-    FILE *fp;
-    fp = fopen(f_name, "w");
-    if (fp == NULL)
+    // Check if file has already been downloaded
+    if (access(f_name, F_OK) != -1)
     {
-        perror("Error opening file: ");
-        exit(EXIT_FAILURE);
+        printf("%s has already been downloaded\n", f_name);
     }
-    uint64_t CLUSTER_SIZE_BYTES = get_cluster_size_bytes(bs);
-    // printf("I shall be reading %llu \n", CLUSTER_SIZE_BYTES);
-    while (size > 0 && curr_clus < MAX_CLUSTER_NUMBER)
+    else
     {
+        printf("Downloading file: %s\n", f_name);
+        uint32_t currClus = getClusterNumber(listing->DIR_FstClusHI, listing->DIR_FstClusLO);
+        uint32_t startRead = dataByteStart + (currClus - 2) * bs->BPB_SecPerClus * bs->BPB_BytesPerSec; //where to start reading from
+        uint32_t toRead = getClusterSize(bs);
+        bool keepReading = true;
 
-        //we are reading this amount of characters
-        uint64_t to_read = CLUSTER_SIZE_BYTES;
-        if (size < to_read)
+        FILE *fp;
+        fp = fopen(f_name, "w"); // Open file
+        if (fp == NULL)
         {
-            to_read = size;
+            perror("Error opening file: ");
+            exit(EXIT_FAILURE);
         }
-        size -= to_read;
-        //We start reading from this cluster
-        uint64_t byte_location = get_byte_location_from_cluster_number(bs, curr_clus);
-
-        // printf("First cluster is %llu\n", curr_clus);
-        //get the next cluster
-        uint64_t next_clus_bytes = calculate_fat_entry_for_cluster(bs, curr_clus);
-        // printf("Next cluster bytes is %llu \n", next_clus_bytes);
-        uint64_t next_clus;
-        read_bytes_into_variable(fd, next_clus_bytes, &next_clus, sizeof(uint64_t));
-        next_clus = next_clus & NEXT_CLUSTER_MASK;
-        //THIS PART HANDLES READING IN OF SEQUENTIAL CLUSTERS
-        while (next_clus < MAX_CLUSTER_NUMBER && next_clus == curr_clus + 1)
+        // Search fd and check if it worked
+        assert(fd != -1);
+        if (lseek(fd, startRead, SEEK_SET) < 0)
         {
-            // printf("Reading an extra cluster %llu\n", next_clus);
-            curr_clus = next_clus;
-            assert(size >= 0); //We can't have to read an empty cluster
-            if (size >= CLUSTER_SIZE_BYTES)
+            perror("Error lseeking: ");
+            exit(EXIT_FAILURE);
+        }
+
+        while (keepReading)
+        {
+            char buffer[toRead];
+            int charsRead = read(fd, buffer, toRead); // Read chars from fd and copy to buffer
+            if (charsRead < 0)
             {
-                size -= CLUSTER_SIZE_BYTES;
-                to_read += CLUSTER_SIZE_BYTES;
+                perror("Error reading cluster");
+                exit(EXIT_FAILURE);
+            }
+
+            if (buffer[0] == 0x00)
+            { // Check if buffer is empty
+                keepReading = false;
             }
             else
             {
-                to_read += size;
-                size = 0;
+                fwrite(buffer, sizeof(char), sizeof(char) * charsRead, fp); //write from buffer into file
             }
-            next_clus_bytes = calculate_fat_entry_for_cluster(bs, next_clus);
-            read_bytes_into_variable(fd, next_clus_bytes, &next_clus, sizeof(uint64_t));
-            next_clus = next_clus & NEXT_CLUSTER_MASK;
         }
-        curr_clus = next_clus;
-        read_byte_location_into_file(fd, fp, byte_location, to_read);
+        printf("File downloaded in directory\n");
+        fclose(fp);
     }
-    printf("File write successful\n");
-    fclose(fp);
+}
+
+void findFile(char pathFileName[10][250], int pathDepth, uint32_t offset, uint32_t cluster)
+{
+
+    int seek;
+    int currSector;
+    uint32_t currCluster;
+    uint32_t nextClusSector;
+    fat32DE *currFile = (fat32DE *)malloc(sizeof(fat32DE)); //current directory
+    assert(currFile != NULL);
+
+    int currSeek = lseek(fd, offset * bs->BPB_BytesPerSec, SEEK_SET); //get the current position on fd
+    int loop = (bs->BPB_BytesPerSec * bs->BPB_SecPerClus) / 32;
+
+    for (int i = 0; i < loop; i++)
+    {
+
+        seek = lseek(fd, currSeek + i * 32, SEEK_SET); //keep seeking through the fd
+
+        if (seek == -1)
+        { //check if seek failed
+
+            printf("Error moving the pointer, cannot seek");
+            exit(EXIT_FAILURE);
+        }
+
+        currSector = read(fd, currFile, sizeof(fat32DE)); //read the current directory from the fd
+
+        if (currSector == -1)
+        { //check if read failed
+
+            printf("Error reading into directory struct");
+            exit(EXIT_FAILURE);
+        }
+
+        if (currFile->DIR_Name[0] == -27)
+        { //check if directory is empty or has contents
+
+            continue;
+        }
+        else if (currFile->DIR_Name[0] == 0x00)
+        {
+
+            return;
+        }
+
+        if (!strncmp(currFile->DIR_Name, ".", 1) == 0 && !strncmp(currFile->DIR_Name, "..", 2) == 0)
+        { //if we're in a directory
+
+            //check if file name from path is equal to file name from fd
+            if (compareFileNames(pathFileName[pathDepth], (char *)currFile->DIR_Name, currFile))
+            {
+
+                currCluster = (currFile->DIR_FstClusHI << 16) | currFile->DIR_FstClusLO;
+                nextClusSector = (currCluster - 2) * bs->BPB_SecPerClus + dataSectorStart;
+
+                //if file extensions are valid download file
+                if (currFile->DIR_Ext[0] != 0x00 && currFile->DIR_Ext[0] != -1 && currFile->DIR_Ext[0] != 32)
+                {
+
+                    downloadFile(currFile, pathFileName[pathDepth]); //download file
+                    close(fd);
+                    exit(0);
+                }
+                pathDepth++;                                                //increase depth
+                findFile(filePath, pathDepth, nextClusSector, currCluster); //recursively search for file
+            }
+        }
+    }
+
+    uint32_t lookUp = fatByteStart + cluster * 4;
+    uint32_t nextCluster;
+
+    lseek(fd, lookUp, SEEK_SET); //search next part of fd
+    read(fd, &nextCluster, 4);   //read next cluster
+    nextCluster = nextCluster & 0x0FFFFFFF;
+
+    if (nextCluster != 0x0FFFFFFF)
+    {
+
+        findFile(filePath, pathDepth, (nextCluster - 2) * bs->BPB_SecPerClus + dataSectorStart, nextCluster); //recursively print
+    }
+    else if (nextCluster == 0x0FFFFFFF || (currFile->DIR_Name[0] & 0x00) == 0x00)
+    { //no more directory entries
+
+        printf("Error: File cannot be found");
+    }
 }
 
 void get_file_from_current_directory(char *f_name)
 {
-
     long read_size = bs->BPB_BytesPerSec * bs->BPB_SecPerClus;
     char contents[read_size];
-    uint64_t next_cluster = convert_high_low_to_cluster_number(curr_dir->DIR_FstClusHI, curr_dir->DIR_FstClusLO);
+    uint64_t next_cluster = getClusterNumber(currDir->DIR_FstClusHI, currDir->DIR_FstClusLO);
     uint64_t file_byte_position = get_byte_location_from_cluster_number(bs, next_cluster);
     read_byte_location_into_buffer(fd, file_byte_position, contents, read_size);
 
@@ -423,7 +508,7 @@ void get_file_from_current_directory(char *f_name)
                 {
                     // printf("Found file %s\n", printBuf);
                     // printf("File start %d %d\n", listing->DIR_FstClusHI, listing->DIR_FstClusLO);
-                    download_file(listing, f_name);
+                    downloadFile(listing, f_name);
                     return;
                 }
                 free(compBuf);
@@ -432,7 +517,7 @@ void get_file_from_current_directory(char *f_name)
         }
         //Get the next cluster entry for the file
         uint64_t cluster_entry_bytes = calculate_fat_entry_for_cluster(bs, next_cluster);
-        read_bytes_into_variable(fd, cluster_entry_bytes, &next_cluster, sizeof(uint64_t));
+        readBytesToVar(fd, cluster_entry_bytes, sizeof(uint64_t), &next_cluster);
         next_cluster = next_cluster & NEXT_CLUSTER_MASK;
         if (next_cluster >= MAX_CLUSTER_NUMBER)
             break; //break if there is no more cluster
@@ -455,7 +540,7 @@ bool is_attr_hidden(uint8_t dir_attr)
     return (dir_attr & ATTR_HIDDEN) != false;
 }
 
-uint64_t get_cluster_size_bytes(fat32BS *bs)
+uint64_t getClusterSize(fat32BS *bs)
 {
     return bs->BPB_SecPerClus * (uint64_t)bs->BPB_BytesPerSec;
 }
