@@ -7,19 +7,21 @@
 //Maximum Buffer Size for reading Input
 #define MAX_BUF 10000
 
-void read_bytes_into_variable(int fd, uint64_t byte_position, void *destination, uint64_t num_bytes_to_read);
+void readBytesToVar(int fd, uint64_t byte_position, uint64_t num_bytes_to_read, void *destination);
 
-void validate_bpb_params();
+void validateFAT32BPB();
 
-void load_and_validate_bpb_params();
+void initializeStructs();
 
-void set_root_dir_file_entry();
+void setRootDirectory();
+
+void printCharToBuffer(char dest[], char info[], int length);
 
 void print_directory_details();
 
 void deviceInfo();
 
-void open_device(char *drive_location);
+void openDisk(char *drive_location);
 
 void get_file_from_current_directory(char *f_name);
 
@@ -31,7 +33,7 @@ bool is_printable_entry(fat32DE *d);
 
 bool is_dir_name_valid(char *dir_name);
 
-uint64_t convert_high_low_to_cluster_number(uint16_t high, uint16_t low);
+uint64_t getClusterNumber(uint16_t high, uint16_t low);
 
 uint64_t calculate_fat_entry_for_cluster(fat32BS *bs, uint64_t next_clus);
 
@@ -39,7 +41,7 @@ bool listing_is_readable_file(fat32DE *listing);
 
 uint64_t calculate_cluster_count(fat32BS *bs, uint64_t RootDirSectors);
 
-uint64_t get_cluster_size_bytes(fat32BS *bs);
+uint64_t getClusterSize(fat32BS *bs);
 
 bool is_attr_directory(uint8_t dir_attr);
 
