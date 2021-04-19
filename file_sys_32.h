@@ -1,50 +1,59 @@
 #ifndef FAT32_IMPL_H
 #define FAT32_IMPL_H
 
+#include "fat32.h"
 #include "file.h"
 #include <stdbool.h>
 
 //Maximum Buffer Size for reading Input
 #define MAX_BUF 10000
 
+void openDisk(char *drive_location);
+
+void initializeStructs();
+
 void readBytesToVar(int fd, uint64_t byte_position, uint64_t num_bytes_to_read, void *destination);
 
 void validateFAT32BPB();
-
-void initializeStructs();
 
 void setRootDirectory();
 
 void printCharToBuffer(char dest[], char info[], int length);
 
-void print_directory_details();
-
 void deviceInfo();
-
-void openDisk(char *drive_location);
-
-void get_file_from_current_directory(char *f_name);
-
-uint64_t get_byte_location_from_cluster_number(fat32BS *bs, uint64_t clus_num);
-
-char *convert_file_entry_name(char entry_name[]);
-
-bool is_printable_entry(fat32DE *d);
-
-bool is_dir_name_valid(char *dir_name);
 
 uint64_t getClusterNumber(uint16_t high, uint16_t low);
 
-uint64_t calculate_fat_entry_for_cluster(fat32BS *bs, uint64_t next_clus);
+uint64_t getByteLocationFromClusterNumb(fat32BootSector *bs, uint64_t clus_num);
 
-bool listing_is_readable_file(fat32DE *listing);
+void readByteLocationToBuffer(int fd, uint64_t byte_position, char buffer[], uint64_t chars_to_read);
 
-uint64_t calculate_cluster_count(fat32BS *bs, uint64_t RootDirSectors);
+void readByteLocationToFile(int fd, FILE *fp, uint64_t byte_position, uint64_t chars_to_read);
 
-uint64_t getClusterSize(fat32BS *bs);
+bool isDIRValid(char *dir_name);
 
-bool is_attr_directory(uint8_t dir_attr);
+bool isPrintableEntry(fat32DE *d);
 
-bool is_attr_hidden(uint8_t dir_attr);
+uint64_t getClusterCount(fat32BootSector *bs, uint64_t RootDirSectors);
+
+uint64_t findNextListing(fat32BootSector *bs, uint64_t next_clus);
+
+bool isReadable(fat32DE *listing);
+
+uint32_t getFatByteStart();
+
+uint32_t getDataSectorStart();
+
+bool isDirectory(uint8_t dir_attr);
+
+bool isHidden(uint8_t dir_attr);
+
+char *trim(char *str, const char *seps);
+
+char *getNames(fat32DE *currFile);
+
+void printContents();
+
+void printDirContents(int level, uint32_t offset, uint32_t cluster);
 
 #endif
