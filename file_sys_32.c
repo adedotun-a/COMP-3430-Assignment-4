@@ -18,6 +18,7 @@ uint32_t dataByteStart;
 char filePath[30][250];
 char *name;
 
+// access the image file and open it
 void openDisk(char *drive_location)
 {
     fd = open(drive_location, O_RDONLY);
@@ -98,6 +99,7 @@ void validateFAT32BPB()
     }
 }
 
+// set current pointer to root directory
 void setRootDirectory()
 {
     uint64_t first_cluster_sector_bytes = getByteLocationFromClusterNumb(bs, bs->BPB_RootClus);
@@ -152,6 +154,7 @@ uint64_t getClusterNumber(uint16_t high, uint16_t low)
     return clus_num;
 }
 
+// return of the next cluster for the directory
 uint64_t getByteLocationFromClusterNumb(fat32BootSector *bs, uint64_t clus_num)
 {
     uint64_t first_data_sector = bs->BPB_RsvdSecCnt + (bs->BPB_NumFATs * (uint64_t)bs->BPB_FATSz32);
@@ -208,7 +211,6 @@ void readByteLocationToFile(int fd, FILE *fp, uint64_t byte_position, uint64_t c
 }
 
 // checks if it is a valid directory
-
 bool isDIRValid(char *dir_name)
 {
     return !((uint8_t)(dir_name[0]) == 0x05 || (uint8_t)(dir_name[0]) == 0xE5);
@@ -222,6 +224,7 @@ bool isPrintableEntry(fat32DE *d)
            && (d->DIR_Attr & ATTR_VOLUME_ID) == 0; //not the root directory
 }
 
+// find the number of clusters in the image file
 uint64_t getClusterCount(fat32BootSector *bs, uint64_t RootDirSectors)
 {
     uint64_t FATSz;
@@ -260,6 +263,7 @@ uint64_t findNextListing(fat32BootSector *bs, uint64_t next_clus)
     return NextListing;
 }
 
+// check if the current directory in the image file is readable
 bool isReadable(fat32DE *listing)
 {
     uint8_t dir_attr = listing->DIR_Attr;
@@ -268,26 +272,31 @@ bool isReadable(fat32DE *listing)
            !isHidden(dir_attr);      // is not hidden
 }
 
+// get start of fat
 uint32_t getFatByteStart()
 {
     return (bs->BPB_RsvdSecCnt * bs->BPB_BytesPerSec);
 }
 
+// get start of current sectotr
 uint32_t getDataSectorStart()
 {
     return bs->BPB_RsvdSecCnt + (bs->BPB_NumFATs * bs->BPB_FATSz32);
 }
 
+// check if the specific entry is a directory
 bool isDirectory(uint8_t dir_attr)
 {
     return (dir_attr & ATTR_DIRECTORY) != false;
 }
 
+// check if directory is hidden
 bool isHidden(uint8_t dir_attr)
 {
     return (dir_attr & ATTR_HIDDEN) != false;
 }
 
+// strip string of extra characters
 char *trim(char *str, const char *seps)
 {
 
@@ -308,6 +317,7 @@ char *trim(char *str, const char *seps)
     return str;
 }
 
+// return the name of the current file
 char *getNames(fat32DE *currFile)
 {
     // char fileFormat[3];
@@ -322,11 +332,13 @@ char *getNames(fat32DE *currFile)
     return name;
 }
 
+// print contents of a directory
 void printContents()
 {
     printDirContents(0, getDataSectorStart(), bs->BPB_RootClus);
 }
 
+// print contents of a directory
 void printDirContents(int level, uint32_t offset, uint32_t cluster)
 {
 
