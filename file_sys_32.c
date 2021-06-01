@@ -145,7 +145,7 @@ void deviceInfo()
 
 /*
     Uses the high bit and low bit to calculate the next cluster number.
-    This function will return 2 if the 
+    This function will return 2 if the
 */
 uint64_t getClusterNumber(uint16_t high, uint16_t low)
 {
@@ -299,21 +299,16 @@ bool isHidden(uint8_t dir_attr)
 // strip string of extra characters
 char *trim(char *str, const char *seps)
 {
-
     if (seps == NULL)
     {
-
         seps = "\t\n\v\f\r ";
     }
-
     int i = strlen(str) - 1;
     while (i >= 0 && strchr(seps, str[i]) != NULL)
     {
-
         str[i] = '\0';
         i--;
     }
-
     return str;
 }
 
@@ -333,104 +328,101 @@ char *getNames(fat32DE *currFile)
 }
 
 // print contents of a directory
-void printContents()
+void list()
 {
-    printDirContents(0, getDataSectorStart(), bs->BPB_RootClus);
+    printDirectory(0, getDataSectorStart(), bs->BPB_RootClus);
 }
 
 // print contents of a directory
-void printDirContents(int level, uint32_t offset, uint32_t cluster)
+void printDirectory(int level, uint32_t offset, uint32_t cluster)
 {
-
     int seek;
     int currSector;
     int currLevel = level;
-    char *dash;
+    char *temp;
     uint32_t currCluster;
     uint32_t nextClusSector;
-    fat32DE *currFile = (fat32DE *)malloc(sizeof(fat32DE)); //current directory
+    //current directory
+    fat32DE *currFile = (fat32DE *)malloc(sizeof(fat32DE));
     assert(currFile != NULL);
 
-    int currSeek = lseek(fd, offset * bs->BPB_BytesPerSec, SEEK_SET); //get the current position on disk
+    //get the current position on disk
+    int currSeek = lseek(fd, offset * bs->BPB_BytesPerSec, SEEK_SET);
     int loop = (bs->BPB_BytesPerSec * (uint64_t)bs->BPB_SecPerClus) / 32;
 
     for (int i = 0; i < loop; i++)
     {
+        //keep seeking through the disk
+        seek = lseek(fd, currSeek + i * 32, SEEK_SET);
 
-        seek = lseek(fd, currSeek + i * 32, SEEK_SET); //keep seeking through the disk
-
+        //seek failed
         if (seek == -1)
-        { //seek failed
-
+        {
             printf("Error: Failed to seek");
             exit(EXIT_FAILURE);
         }
 
-        currSector = read(fd, currFile, sizeof(fat32DE)); //read the current directory from the disk
+        //read the current directory from the disk
+        currSector = read(fd, currFile, sizeof(fat32DE));
 
+        //failed to read
         if (currSector == -1)
-        { //failed to read
-
+        {
             printf("Error: Failed to read directory struct");
             exit(EXIT_FAILURE);
         }
 
-        if (currFile->DIR_Name[0] == -27)
-        { //check if directory is empty or has contents
-
-            continue;
-        }
-        else if (currFile->DIR_Name[0] == 0x00)
+        if (currFile->DIR_Name[0] == 0x00)
         {
-
             return;
         }
 
+        //if we're in a valid directory
         if (strncmp(currFile->DIR_Name, ".", 1) != 0 && strncmp(currFile->DIR_Name, "..", 2) != 0)
-        { //if we're in a directory
-
-            dash = (char *)malloc(sizeof(char) * 5);
+        {
+            // add a dash for every level in the directory path
+            temp = (char *)malloc(sizeof(char) * 5);
             for (int i = 0; i < currLevel; i++)
-            { //for every level in the directory path add a dash
-
-                strcat(dash, "-");
+            {
+                strcat(temp, "-");
             }
 
+            //track the path depth
             if (currLevel == 0)
-            { //tracker for the path depth
-
+            {
                 currLevel++;
             }
 
             //if directory is readable and contains other files
             if (currFile->DIR_Attr == 0x01 || currFile->DIR_Attr == 0x10 || seek == (int)dataByteStart)
             {
-
-                printf("\n%sDirectory: %s\n", dash, getNames(currFile)); //print directory name
+                //print the directory name
+                printf("\n%sDirectory: %s\n", temp, getNames(currFile));
                 currCluster = (currFile->DIR_FstClusHI << 16) | currFile->DIR_FstClusLO;
                 nextClusSector = (currCluster - 2) * bs->BPB_SecPerClus + getDataSectorStart();
-                printDirContents(currLevel + 1, nextClusSector, currCluster); //recursively print
+                //recursively check divverent levels of directory and
+                printDirectory(currLevel + 1, nextClusSector, currCluster);
             }
             else if (currFile->DIR_Name[8] != 0x00 && currFile->DIR_Name[8] != -1 && currFile->DIR_Name[8] != 32)
             {
-
-                printf("%s%s\n", dash, getNames(currFile)); //print file names
+                //print the file names
+                printf("%s%s\n", temp, getNames(currFile));
             }
         }
     }
 
+    //free the name allocation
     free(name);
 
-    uint32_t lookUp = getFatByteStart() + cluster * 4;
+    uint32_t search = getFatByteStart() + cluster * 4;
     uint32_t nextCluster;
 
-    lseek(fd, lookUp, SEEK_SET); //search next part of disk
+    lseek(fd, search, SEEK_SET); //search next part of disk
     read(fd, &nextCluster, 4);   //read next cluster
     nextCluster = nextCluster & 0x0FFFFFFF;
 
     if (nextCluster != 0x0FFFFFFF)
     {
-
-        printDirContents(currLevel, (nextCluster - 2) * bs->BPB_SecPerClus + getDataSectorStart(), nextCluster); //recursively print
+        printDirectory(currLevel, (nextCluster - 2) * bs->BPB_SecPerClus + getDataSectorStart(), nextCluster); //recursively print
     }
 }

@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
     {
         printf("%s Data List:\n", argv[1]);
         // list data
-        printContents();
+        list();
     }
 
     else if (!strcmp(argv[2], "get"))

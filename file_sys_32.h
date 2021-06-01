@@ -52,8 +52,8 @@ char *trim(char *str, const char *seps);
 
 char *getNames(fat32DE *currFile);
 
-void printContents();
+void list();
 
-void printDirContents(int level, uint32_t offset, uint32_t cluster);
+void printDirectory(int level, uint32_t offset, uint32_t cluster);
 
 #endif
